@@ -402,8 +402,6 @@ This is a research project. Contributions are welcome for:
 ## 📧 Contact & Support
 
 **Issues:** Open a GitHub issue for bugs or questions  
-**Email:** [your.email@domain.com]  
-**Twitter:** [@yourhandle]
 
 **Professional Inquiries:**
 - Strategy optimization consulting
