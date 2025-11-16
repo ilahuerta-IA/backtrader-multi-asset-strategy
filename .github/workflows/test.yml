@@ -1,0 +1,52 @@
+name: Backtest Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Validate Python syntax
+      run: |
+        python -m py_compile sunrise_ogle_multi_asset.py
+        python -m py_compile strategies/*.py
+    
+    - name: Check code style
+      run: |
+        pip install flake8
+        # Stop on syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Allow some flexibility on style
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Verify data files exist
+      run: |
+        test -f data/EURUSD_5m_5Yea.csv || echo "Warning: EURUSD data missing"
+        test -f data/USDCHF_5m_5Yea.csv || echo "Warning: USDCHF data missing"
+        test -f data/GBPUSD_5m_5Yea.csv || echo "Warning: GBPUSD data missing"
+        test -f data/AUDUSD_5m_5Yea.csv || echo "Warning: AUDUSD data missing"
+        test -f data/XAUUSD_5m_5Yea.csv || echo "Warning: XAUUSD data missing"
+        test -f data/XAGUSD_5m_5Yea.csv || echo "Warning: XAGUSD data missing"
+    
+    # Note: Full backtest disabled to save CI time
+    # Uncomment to run full backtest on every commit (takes 8-10 minutes)
+    # - name: Run backtest
+    #   run: |
+    #     python sunrise_ogle_multi_asset.py
