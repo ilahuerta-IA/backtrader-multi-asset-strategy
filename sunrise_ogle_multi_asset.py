@@ -53,27 +53,96 @@ from sunrise_ogle_xauusd import SunriseOgle as SunriseOgleXAUUSD
 from sunrise_ogle_xagusd import SunriseOgle as SunriseOgleXAGUSD
 from sunrise_ogle_gbpusd import SunriseOgle as SunriseOgleGBPUSD
 from sunrise_ogle_audusd import SunriseOgle as SunriseOgleAUDUSD
+from sunrise_ogle_usdjpy import SunriseOgle as SunriseOgleUSDJPY
+from sunrise_ogle_eurjpy import SunriseOgle as SunriseOgleEURJPY
+
+# =============================================================
+# CUSTOM COMMISSION SCHEMES
+# =============================================================
+
+class USDJPYCommission(bt.CommInfoBase):
+    """
+    Commission scheme for USD/JPY (JPY-quoted pairs).
+    - Price is in JPY (e.g., 150.00).
+    - PnL in Backtrader is calculated as: (Exit - Entry) * Size.
+    - If Size=100,000 and Price moves 1.00 (100 pips), PnL = 100,000 JPY.
+    - We need to convert this JPY PnL to Account Currency (USD).
+    - Conversion: PnL_USD = PnL_JPY / USDJPY_Rate.
+    """
+    params = (
+        ('stocklike', False),
+        ('commtype', bt.CommInfoBase.COMM_PERC),
+        ('perc', 0.0),  # No commission percentage
+        ('leverage', 30.0),
+        ('automargin', False), # We handle margin manually or let BT do it
+        ('mult', 1.0),
+    )
+
+    def get_pnl(self, price, price0, size, opened, closed):
+        # Standard PnL: (price - price0) * size
+        # This gives PnL in JPY.
+        pnl_jpy = (price - price0) * size
+        
+        # Convert to USD. We need the current USDJPY rate.
+        # Since 'price' IS the USDJPY rate, we can use it!
+        # If we are Long, we sell at 'price'.
+        # If we are Short, we buy at 'price'.
+        # Approximate conversion using the exit price.
+        if price > 0:
+            return pnl_jpy / price
+        return 0.0
+
+class EURJPYCommission(bt.CommInfoBase):
+    """
+    Commission scheme for EUR/JPY.
+    - Price is in JPY (e.g., 160.00).
+    - PnL is in JPY.
+    - Account is USD.
+    - Conversion: PnL_USD = PnL_JPY / USDJPY_Rate.
+    - We don't have USDJPY rate here directly.
+    - We will use a fixed rate approximation or just divide by price/EURUSD_Rate?
+    - Actually, EURJPY = EURUSD * USDJPY.
+    - So USDJPY = EURJPY / EURUSD.
+    - PnL_USD = PnL_JPY / (EURJPY / EURUSD) = PnL_JPY * EURUSD / EURJPY.
+    - This is getting complicated for a simple backtest.
+    - SIMPLIFICATION: Assume fixed USDJPY rate of 150.0 for conversion.
+    """
+    params = (
+        ('stocklike', False),
+        ('commtype', bt.CommInfoBase.COMM_PERC),
+        ('perc', 0.0),
+        ('leverage', 30.0),
+        ('automargin', False),
+        ('mult', 1.0),
+    )
+
+    def get_pnl(self, price, price0, size, opened, closed):
+        pnl_jpy = (price - price0) * size
+        # Assume fixed USDJPY rate for conversion
+        usdjpy_rate = 150.0
+        return pnl_jpy / usdjpy_rate
 
 # =============================================================
 # CONFIGURATION PARAMETERS
 # =============================================================
 
 # === BACKTEST SETTINGS ===
-FROMDATE = '2020-07-10'               
-TODATE = '2025-07-25'                 
-STARTING_CASH = 100000  # Adjusted for 6 assets at 16.67% each to achieve $100K total
+FROMDATE = '2021-05-10'               
+TODATE = '2022-07-25'                 
+STARTING_CASH = 100000  # Adjusted for 8 assets at 12.5% each to achieve $100K total
 ENABLE_PLOT = True                    
 
 # === ASSET ALLOCATION ===
 # Optimized for Ray Dalio's 4 Economic Environments
 # Enhanced allocation to deflation-hedge assets (USDCHF, XAUUSD)
-DEFAULT_ALLOCATION = 0.1667  # Base allocation for balanced assets
+DEFAULT_ALLOCATION = 0.125  # Base allocation for balanced assets (1/8 = 12.5%)
 
 # Enhanced allocations for economic environment coverage (Total = 100%):
-DEFLATION_HEDGE_ALLOCATION = 0.20    # Higher allocation for USD/CHF (deflation hedge)
-INFLATION_HEDGE_ALLOCATION = 0.18    # Solid allocation for Gold (inflation hedge) 
-STANDARD_ALLOCATION = 0.16          # Standard allocation for major forex pairs
-COMMODITY_ALLOCATION = 0.15         # Moderate allocation for commodity-sensitive assets
+# NOTE: Currently using equal weight (DEFAULT_ALLOCATION) for all assets
+DEFLATION_HEDGE_ALLOCATION = 0.125    # Higher allocation for USD/CHF (deflation hedge)
+INFLATION_HEDGE_ALLOCATION = 0.125    # Solid allocation for Gold (inflation hedge) 
+STANDARD_ALLOCATION = 0.125          # Standard allocation for major forex pairs
+COMMODITY_ALLOCATION = 0.125         # Moderate allocation for commodity-sensitive assets
 
 # === TEMP REPORTS DIRECTORY ===
 TEMP_REPORTS_DIR = BASE_DIR / 'temp_reports'
@@ -84,37 +153,73 @@ ASSETS = {
         'data_file': 'EURUSD_5m_5Yea.csv',  # Fixed to match sunrise_ogle_long_only.py
         'strategy_class': SunriseOgleEURUSD,  # Using sunrise_ogle_long_only.py (newest, cleanest LONG-only)
         'forex_instrument': 'EURUSD',
-        'allocation': STANDARD_ALLOCATION  # 16% - Balanced developed market exposure
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': False,
+        'window_offset_multiplier': 1.0,
+        'window_price_offset_multiplier': 0.01
     },
     'USDCHF': {
         'data_file': 'USDCHF_5m_5Yea.csv', 
         'strategy_class': SunriseOgleUSDCHF,  # Using sunrise_ogle_usdchf.py
         'forex_instrument': 'USDCHF',
-        'allocation': DEFLATION_HEDGE_ALLOCATION  # 20% - Enhanced deflation protection (CHF safe haven)
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': False,
+        'window_offset_multiplier': 1.0,
+        'window_price_offset_multiplier': 0.01
     },
     'XAUUSD': {
         'data_file': 'XAUUSD_5m_5Yea.csv',  # Gold data file
         'strategy_class': SunriseOgleXAUUSD,  # Using sunrise_ogle_xauusd.py
         'forex_instrument': 'XAUUSD',
-        'allocation': INFLATION_HEDGE_ALLOCATION  # 18% - Strong inflation hedge
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': False,
+        'window_offset_multiplier': 1.0,
+        'window_price_offset_multiplier': 0.01
     },
     'XAGUSD': {
         'data_file': 'XAGUSD_5m_5Yea.csv',  # Silver data file
         'strategy_class': SunriseOgleXAGUSD,  # Using sunrise_ogle_xagusd.py
         'forex_instrument': 'XAGUSD',
-        'allocation': COMMODITY_ALLOCATION  # 15% - Moderate commodity exposure
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': True,
+        'window_offset_multiplier': 0.5,
+        'window_price_offset_multiplier': 0.001
     },
     'GBPUSD': {
         'data_file': 'GBPUSD_5m_5Yea.csv',  # British Pound data file
         'strategy_class': SunriseOgleGBPUSD,  # Using sunrise_ogle_gbpusd.py
         'forex_instrument': 'GBPUSD',
-        'allocation': STANDARD_ALLOCATION  # 16% - Balanced developed market exposure
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': False,
+        'window_offset_multiplier': 1.0,
+        'window_price_offset_multiplier': 0.01
     },
     'AUDUSD': {
         'data_file': 'AUDUSD_5m_5Yea.csv',  # Australian Dollar data file
         'strategy_class': SunriseOgleAUDUSD,  # Using sunrise_ogle_audusd.py
         'forex_instrument': 'AUDUSD',
-        'allocation': COMMODITY_ALLOCATION  # 15% - Moderate commodity currency exposure
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': False,
+        'window_offset_multiplier': 1.0,
+        'window_price_offset_multiplier': 0.01
+    },
+    'USDJPY': {
+        'data_file': 'USDJPY_5m_5Yea.csv',  # Japanese Yen data file
+        'strategy_class': SunriseOgleUSDJPY,  # Using sunrise_ogle_usdjpy.py
+        'forex_instrument': 'USDJPY',
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': True,
+        'window_offset_multiplier': 2.0,
+        'window_price_offset_multiplier': 0.01
+    },
+    'EURJPY': {
+        'data_file': 'EURJPY_5m_5Yea.csv',  # Euro vs Yen data file
+        'strategy_class': SunriseOgleEURJPY,  # Using sunrise_ogle_eurjpy.py
+        'forex_instrument': 'EURJPY',
+        'allocation': DEFAULT_ALLOCATION,  # 12.5%
+        'use_window_time_offset': False,
+        'window_offset_multiplier': 1.0,
+        'window_price_offset_multiplier': 0.01
     }
 }
 
@@ -174,7 +279,14 @@ def run_single_asset_backtest(asset_name, asset_config, fromdate, todate, starti
     # Set cash allocation for this asset
     asset_cash = starting_cash * asset_config['allocation']
     cerebro.broker.setcash(asset_cash)
-    cerebro.broker.setcommission(leverage=30.0)
+    
+    # Set commission scheme based on asset
+    if asset_name == 'USDJPY':
+        cerebro.broker.addcommissioninfo(USDJPYCommission())
+    elif asset_name == 'EURJPY':
+        cerebro.broker.addcommissioninfo(EURJPYCommission())
+    else:
+        cerebro.broker.setcommission(leverage=30.0)
     
     # Add strategy with asset-specific configuration
     strategy_kwargs = {
@@ -183,6 +295,9 @@ def run_single_asset_backtest(asset_name, asset_config, fromdate, todate, starti
         'forex_instrument': asset_config['forex_instrument'],
         'verbose_debug': False,  # Disable verbose debug output
         'print_signals': False,  # Disable individual trade signal printing
+        'use_window_time_offset': asset_config.get('use_window_time_offset', False),
+        'window_offset_multiplier': asset_config.get('window_offset_multiplier', 1.0),
+        'window_price_offset_multiplier': asset_config.get('window_price_offset_multiplier', 0.01)
     }
     
     cerebro.addstrategy(asset_config['strategy_class'], **strategy_kwargs)
